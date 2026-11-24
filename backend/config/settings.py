@@ -94,6 +94,10 @@ SPECTACULAR_SETTINGS = {"TITLE": "Speech to Text API", "VERSION": "1.0.0"}
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-transcribe-live")
+# Naming both languages keeps mixed speech in one script more often than auto-detect.
+GEMINI_LANGUAGES = ["hi-IN", "en-IN"]
+GEMINI_POLISH_MODEL = "gemini-3.5-transcribe"
+POLISH_TIMEOUT_SECONDS = 20
 # Gemini ends a live session at 10 minutes, so we stop earlier.
 MAX_RECORDING_MS = 9 * 60 * 1000
 MAX_CONCURRENT_RECORDINGS = 3

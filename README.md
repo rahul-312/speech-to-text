@@ -20,6 +20,8 @@ PostgreSQL <- DRF CRUD API <- React history pages
 
 - The Gemini key stays on the server.
 - Interim text is shown in grey and replaced by the final text.
+- After Stop, the whole recording is transcribed again with `gemini-3.5-transcribe` for accuracy.
+  If that fails, looks wrong or changes script, the live text is kept.
 - If the connection drops, finalized text is kept and the recording is marked `interrupted`.
 - Recordings stop at 9 minutes because Gemini ends a live session at 10.
 
@@ -81,6 +83,8 @@ Run one instance: the limit on simultaneous recordings is kept in memory.
 
 - Transcription uses Gemini's hosted API. On the free tier, Google may use the content to
   improve its products, so do not record anything sensitive.
+- On the free tier the second pass is limited to 3 requests a minute and 25 a day (as of
+  November 2026), so only recordings up to about 2-3 minutes get it.
 - Segment times are approximate; they are measured from the audio sent.
 - "Read aloud" uses the browser's voices, so Hindi depends on the device, and Hindi written
   in Roman letters is read with an English voice.

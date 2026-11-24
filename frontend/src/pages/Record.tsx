@@ -59,7 +59,7 @@ export default function Record() {
           : 'border-transparent bg-linear-to-br from-[#25a57c] to-[#0b5c46] text-white shadow-accent/30 hover:border-transparent hover:brightness-110'}`}
           disabled={locked} onClick={toggle}>
           {active ? <Square className="size-5" /> : <Mic className="size-6" />}
-          <span>{phase === 'connecting' ? 'Connecting…' : phase === 'stopping' ? 'Finishing…' : active ? 'Stop Recording' : 'Start Recording'}</span>
+          <span>{phase === 'connecting' ? 'Connecting…' : phase === 'stopping' ? (state.polishing ? 'Polishing…' : 'Finishing…') : active ? 'Stop Recording' : 'Start Recording'}</span>
           {!active && <Chevron className="ml-2 size-5" />}
         </button>
       </div>

@@ -4,7 +4,7 @@ import contextlib
 import pytest
 from channels.testing import WebsocketCommunicator
 
-from transcriptions import transcriber
+from transcriptions import polish, transcriber
 from transcriptions.consumers import TranscribeConsumer
 from transcriptions.models import Transcription
 
@@ -51,7 +51,11 @@ def engine(monkeypatch, settings):
     async def fake_open():
         yield holder()
 
+    async def no_polish(_pcm, _live):
+        return None
+
     monkeypatch.setattr(transcriber, "open_transcriber", fake_open)
+    monkeypatch.setattr(polish, "polish", no_polish)
     return holder
 
 
@@ -131,3 +135,37 @@ async def test_concurrency_limit(engine, settings):
     settings.MAX_CONCURRENT_RECORDINGS = 0
     ws = await start()
     assert "busy" in (await ws.receive_json_from())["message"]
+
+
+async def test_polish_replaces_live_text(engine, monkeypatch):
+    seen = {}
+
+    async def fake(pcm, live):
+        seen.update(size=len(pcm), live=live)
+        return [(0, 100, "polished text")]
+
+    monkeypatch.setattr(polish, "polish", fake)
+    ws = await start()
+    await until(ws, "ready")
+    await ws.send_to(bytes_data=CHUNK)
+    await until(ws, "final")
+    await ws.send_json_to({"type": "stop"})
+    kinds = [m["type"] for m in await until(ws, "done")]
+    assert "polished" in kinds
+    assert seen == {"size": 3200, "live": "नमस्ते world last words"}
+    item = await Transcription.objects.aget()
+    assert [s.text async for s in item.segments.all()] == ["polished text"]
+
+
+async def test_interrupted_recording_is_not_polished(engine, monkeypatch):
+    async def fail(_pcm, _live):
+        raise AssertionError("should not run")
+
+    monkeypatch.setattr(polish, "polish", fail)
+    ws = await start()
+    await until(ws, "ready")
+    await ws.send_to(bytes_data=CHUNK)
+    await until(ws, "final")
+    await ws.disconnect(timeout=5)
+    item = await Transcription.objects.aget()
+    assert item.status == "interrupted" and await item.segments.acount() == 2
