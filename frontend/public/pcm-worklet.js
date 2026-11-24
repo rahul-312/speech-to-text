@@ -1,6 +1,7 @@
 // Averages the mic's native rate down to 16 kHz and emits 100 ms Int16 chunks.
 const TARGET = 16000
 const CHUNK = 1600
+const SILENCE = new Float32Array(128)
 
 class PcmWorklet extends AudioWorkletProcessor {
   constructor() {
@@ -18,8 +19,7 @@ class PcmWorklet extends AudioWorkletProcessor {
   }
 
   process(inputs) {
-    const input = inputs[0][0]
-    if (!input) return true
+    const input = inputs[0][0] ?? SILENCE // keep the clock running when a source is idle
     for (const sample of input) {
       let left = 1 // share of this input sample still to be consumed
       while (this.weight + left >= this.ratio) {

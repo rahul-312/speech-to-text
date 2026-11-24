@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, NavLink, Route, Routes } from 'react-router-dom'
 import { api, setPasscode } from './api'
+import { Clock, Mic, Wave, Waves } from './icons'
 import Dashboard from './pages/Dashboard'
 import Detail from './pages/Detail'
 import Record from './pages/Record'
@@ -42,17 +43,21 @@ export default function App() {
     return () => window.removeEventListener('passcode-required', lock)
   }, [])
   const tab = ({ isActive }: { isActive: boolean }) =>
-    `py-3 border-b-2 ${isActive ? 'border-accent font-semibold' : 'border-transparent text-muted'}`
+    `flex items-center gap-2 border-b-2 px-3 py-5 text-sm sm:px-6 ${isActive ? 'border-accent font-semibold text-accent' : 'border-transparent hover:text-accent'}`
   return (
     <>
+      <Waves />
       <header className="border-b border-line bg-white">
-        <nav className="mx-auto flex max-w-3xl items-center gap-6 px-4">
-          <Link to="/" className="mr-auto font-bold">Speech to Text</Link>
-          <NavLink to="/" end className={tab}>Record</NavLink>
-          <NavLink to="/history" className={tab}>History</NavLink>
+        <nav className="flex items-center gap-2 px-4 sm:px-10">
+          <Link to="/" className="mr-auto flex items-center gap-3 text-lg font-semibold">
+            <Wave className="size-8 text-accent" />
+            <span className="max-sm:sr-only">Speech to Text</span>
+          </Link>
+          <NavLink to="/" end className={tab}><Mic className="size-5" />Record</NavLink>
+          <NavLink to="/history" className={tab}><Clock className="size-5" />History</NavLink>
         </nav>
       </header>
-      <main className="mx-auto max-w-3xl px-4 py-8">
+      <main className="mx-auto max-w-5xl px-4 py-8">
         <Routes>
           <Route path="/" element={<Record />} />
           <Route path="/history" element={<Dashboard />} />
