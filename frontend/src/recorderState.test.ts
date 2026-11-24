@@ -30,3 +30,11 @@ test('close after done is not an error, and a new recording resets', () => {
   expect(s.limited).toBe(true)
   expect(reducer(s, { type: 'connect' }).limited).toBe(false)
 })
+
+test('the polished text replaces the live text', () => {
+  const s = run({ type: 'connect' }, ready, final(1, 'live'), { type: 'polishing' },
+    { type: 'polished', segments: [{ id: 9, text: 'polished' }] },
+    { type: 'done', id: 'a', status: 'completed' })
+  expect(s.finals.map((f) => f.text)).toEqual(['polished'])
+  expect(s.polishing).toBe(false)
+})

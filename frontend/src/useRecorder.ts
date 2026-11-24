@@ -3,6 +3,8 @@ import { getPasscode } from './api'
 import { initial, reducer } from './recorderState'
 import type { ServerEvent } from './recorderState'
 
+const MAX_EARLY_CHUNKS = 150 // 15 s; the server queues up to 20 s
+
 interface Live {
   ws?: WebSocket
   ctx?: AudioContext
@@ -37,8 +39,8 @@ export function useRecorder() {
     try {
       if (!navigator.mediaDevices) throw new Error('insecure context')
       live.stream = await navigator.mediaDevices.getUserMedia({
-        // Filters off so speech from the computer's speakers is heard too.
-        audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: true },
+        // Filters on: they keep speaker sound and background noise out of the transcript.
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       })
       live.ctx = new AudioContext()
       await live.ctx.resume()
@@ -50,6 +52,16 @@ export function useRecorder() {
       return
     }
     if (ref.current !== live) return releaseMic(live) // page was left meanwhile
+
+    // Capture starts now; audio waits here until the server is ready.
+    let early: ArrayBuffer[] | null = []
+    let sent = 0
+    const node = new AudioWorkletNode(live.ctx, 'pcm-worklet', {
+      channelCount: 1, channelCountMode: 'explicit', // mixes stereo to mono
+    })
+    live.node = node
+    live.ctx.createMediaStreamSource(live.stream).connect(node)
+    node.connect(live.ctx.destination) // outputs silence; keeps the graph running
 
     const scheme = location.protocol === 'https:' ? 'wss' : 'ws'
     const ws = new WebSocket(`${scheme}://${location.host}/ws/transcribe`)
@@ -63,29 +75,26 @@ export function useRecorder() {
         window.dispatchEvent(new Event('passcode-required'))
       dispatch(event)
       if (event.type === 'limit') releaseMic(live)
-      if (event.type !== 'ready' || !live.ctx || !live.stream) return
-      const node = new AudioWorkletNode(live.ctx, 'pcm-worklet', {
-        channelCount: 1, channelCountMode: 'explicit', // mixes stereo to mono
-      })
-      live.node = node
-      let sent = 0
-      node.port.onmessage = ({ data }) => {
-        if (ws.readyState !== WebSocket.OPEN) return
-        if (data === 'flushed') {
-          ws.send(JSON.stringify({ type: 'stop' }))
-          releaseMic(live)
-          return
-        }
-        ws.send(data)
-        const pcm = new Int16Array(data as ArrayBuffer)
-        sent += pcm.length
-        setElapsed(sent / 16)
-        let peak = 0
-        for (const v of pcm) peak = Math.max(peak, Math.abs(v))
-        setLevel(peak / 32768)
+      if (event.type !== 'ready' || !early) return
+      for (const chunk of early) ws.send(chunk)
+      early = null
+    }
+    node.port.onmessage = ({ data }) => {
+      if (data === 'flushed') {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'stop' }))
+        releaseMic(live)
+        return
       }
-      live.ctx.createMediaStreamSource(live.stream).connect(node)
-      node.connect(live.ctx.destination) // outputs silence; keeps the graph running
+      if (early) {
+        if (early.length < MAX_EARLY_CHUNKS) early.push(data)
+      } else if (ws.readyState === WebSocket.OPEN) ws.send(data)
+      else return
+      const pcm = new Int16Array(data as ArrayBuffer)
+      sent += pcm.length
+      setElapsed(sent / 16)
+      let peak = 0
+      for (const v of pcm) peak = Math.max(peak, Math.abs(v))
+      setLevel(peak / 32768)
     }
     ws.onclose = () => {
       releaseMic(live)

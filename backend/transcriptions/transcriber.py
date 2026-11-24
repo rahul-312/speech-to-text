@@ -48,8 +48,9 @@ async def open_transcriber():
     )
     config = types.LiveConnectConfig(
         response_modalities=["TEXT"],
-        # Empty list = automatic language detection, including code-switching.
-        input_audio_transcription=types.AudioTranscriptionConfig(language_codes=[]),
+        input_audio_transcription=types.AudioTranscriptionConfig(
+            language_codes=settings.GEMINI_LANGUAGES
+        ),
     )
     async with client.aio.live.connect(
         model=settings.GEMINI_MODEL, config=config

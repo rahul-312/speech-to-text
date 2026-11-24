@@ -2,11 +2,13 @@ import asyncio
 import json
 import logging
 
+from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
-from . import transcriber
+from . import polish, transcriber
 from .models import Segment, Transcription
 from .permissions import passcode_ok
 
@@ -21,7 +23,7 @@ ABORT = object()
 
 class TranscribeConsumer(AsyncWebsocketConsumer):
     """Client: start(JSON), audio(binary), stop(JSON).
-    Server: ready, interim, final, limit, error, done."""
+    Server: ready, interim, final, limit, polishing, polished, error, done."""
 
     active = 0  # single process, so a class counter is enough
 
@@ -85,6 +87,8 @@ class TranscribeConsumer(AsyncWebsocketConsumer):
 
     async def _run(self, title):
         self.audio_ms = 0
+        self.audio = bytearray()
+        self.live = []
         self.seq = 0
         self.segment_start = None
         self.last_end = 0
@@ -113,11 +117,14 @@ class TranscribeConsumer(AsyncWebsocketConsumer):
             await self._emit("error", message=_friendly(exc))
         finally:
             self.stopping = True
-            TranscribeConsumer.active -= 1
             try:
                 await self._finalize(status)
+                if status == Transcription.Status.COMPLETED and not self.disconnected:
+                    await self._polish()
             except Exception:
                 log.exception("Could not finalize transcription")
+            finally:
+                TranscribeConsumer.active -= 1
 
         if self.item:
             await self._emit("done", id=str(self.item.id), status=status)
@@ -159,6 +166,7 @@ class TranscribeConsumer(AsyncWebsocketConsumer):
                 clean = False
                 break
             await engine.send(item)
+            self.audio += item
             self.audio_ms += len(item) // BYTES_PER_MS
             if (
                 self.audio_ms >= settings.MAX_RECORDING_MS
@@ -209,6 +217,7 @@ class TranscribeConsumer(AsyncWebsocketConsumer):
             start_ms=self.last_end if start is None else start,
             end_ms=self.audio_ms,
         )
+        self.live.append(text)
         self.last_end = self.audio_ms
         await self._emit(
             "final",
@@ -223,6 +232,28 @@ class TranscribeConsumer(AsyncWebsocketConsumer):
         await Transcription.objects.filter(pk=self.item.pk).aupdate(
             status=status, duration_ms=self.audio_ms, updated_at=timezone.now()
         )
+
+    async def _polish(self):
+        """Replace the live text with a more accurate pass over the whole recording."""
+        if not self.live:
+            return
+        await self._emit("polishing")
+        parts = await polish.polish(bytes(self.audio), " ".join(self.live))
+        if parts:
+            segments = await self._replace_segments(parts)
+            await self._emit("polished", segments=segments)
+
+    @database_sync_to_async
+    def _replace_segments(self, parts):
+        with transaction.atomic():
+            self.item.segments.all().delete()
+            rows = [
+                self.item.segments.create(
+                    seq=i, text=text, original_text=text, start_ms=start, end_ms=end
+                )
+                for i, (start, end, text) in enumerate(parts, 1)
+            ]
+        return [{"id": r.id, "seq": r.seq, "text": r.text} for r in rows]
 
     async def _emit(self, kind, **data):
         if self.disconnected:
