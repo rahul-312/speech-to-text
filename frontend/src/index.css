@@ -1,0 +1,24 @@
+@import 'tailwindcss';
+@source not "../dist";
+
+@theme {
+  --font-sans: 'Segoe UI', 'Noto Sans', 'Nirmala UI', 'Noto Sans Devanagari', system-ui, sans-serif;
+  --color-paper: #f6f7f4;
+  --color-ink: #17211d;
+  --color-muted: #5d6963;
+  --color-line: #d9ded8;
+  --color-accent: #0b6b4f;
+  --color-danger: #b3261e;
+}
+
+body { background: var(--color-paper); color: var(--color-ink); font-family: var(--font-sans); }
+
+@layer components {
+  .btn {
+    @apply rounded-md border border-line bg-white px-3 py-1.5 text-sm font-medium hover:border-ink disabled:opacity-50 disabled:hover:border-line cursor-pointer disabled:cursor-default;
+  }
+  .btn-primary { @apply border-accent bg-accent text-white hover:border-ink; }
+  .btn-danger { @apply text-danger hover:border-danger; }
+  .field { @apply w-full rounded-md border border-line bg-white px-3 py-2; }
+  :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+}
