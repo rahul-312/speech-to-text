@@ -37,7 +37,8 @@ export function useRecorder() {
     try {
       if (!navigator.mediaDevices) throw new Error('insecure context')
       live.stream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+        // Filters off so speech from the computer's speakers is heard too.
+        audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: true },
       })
       live.ctx = new AudioContext()
       await live.ctx.resume()
@@ -63,7 +64,9 @@ export function useRecorder() {
       dispatch(event)
       if (event.type === 'limit') releaseMic(live)
       if (event.type !== 'ready' || !live.ctx || !live.stream) return
-      const node = new AudioWorkletNode(live.ctx, 'pcm-worklet')
+      const node = new AudioWorkletNode(live.ctx, 'pcm-worklet', {
+        channelCount: 1, channelCountMode: 'explicit', // mixes stereo to mono
+      })
       live.node = node
       let sent = 0
       node.port.onmessage = ({ data }) => {
